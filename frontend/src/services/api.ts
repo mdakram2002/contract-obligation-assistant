@@ -1,4 +1,5 @@
-const API_BASE = '/api';
+const configuredApiBase = import.meta.env.VITE_API_BASE_URL?.replace(/\/+$/, '');
+const API_BASE = configuredApiBase ? `${configuredApiBase}/api` : '/api';
 
 async function getErrorMessage(response: Response): Promise<string> {
   const body = await response.text();

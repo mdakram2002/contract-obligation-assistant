@@ -313,7 +313,7 @@ GROQ_BASE_URL=https://api.groq.com/openai/v1
 MAX_UPLOAD_SIZE_MB=10
 
 # CORS
-CORS_ORIGINS=http://localhost:5173,http://localhost:3000
+CORS_ORIGINS=["http://localhost:5173","http://localhost:3000"]
 ```
 
 ## Running Backend
@@ -355,42 +355,82 @@ Frontend tests are not yet implemented. This is a known limitation.
 
 ## Deployment
 
-### Production Build
+This project can be deployed with **Render PostgreSQL + a Render FastAPI web service + a Vercel Vite frontend**. The frontend calls the backend directly; Render must allow the Vercel site origin through CORS.
 
-**Frontend**:
-```bash
-cd frontend
-npm run build
-```
-Output in `frontend/dist/`
+Current public service URLs:
 
-**Backend**:
-No special build step required. Ensure:
-- `DEBUG=false` in production
-- Use production PostgreSQL database
-- Render-style `postgres://` / `postgresql://` URLs are normalized to SQLAlchemy's asyncpg driver for the app and migrations
-- Set secure CORS origins
-- Use environment variables for secrets
+- Frontend: `https://contract-obligation-assistant.vercel.app`
+- Backend: `https://contract-obligation-assistant.onrender.com`
 
-### Deployment Options
+### 1. Create the Render PostgreSQL database
 
-The application can be deployed using:
+1. In Render, create a PostgreSQL database. Choose a region and keep it available for the lifetime of the application; do not use an expiring trial database for persistent contract data.
+2. Open the database's **Connect** details and copy its **Internal Database URL**. The Render web service and database must be in the same region to use the internal hostname.
+3. Keep this URL private. Set it as the backend's `DATABASE_URL` environment variable; do not put it in frontend settings or commit it to the repository.
 
-**Frontend**: Vercel, Netlify, or any static hosting
+The application normalizes Render `postgres://` / `postgresql://` URLs to SQLAlchemy's async `asyncpg` driver. Use the internal URL exactly as provided by Render.
 
-**Backend**: Render, Railway, Azure App Service, or any Python hosting
+### 2. Deploy the FastAPI backend to Render
 
-**Database**: Managed PostgreSQL (Render, Neon, AWS RDS, etc.)
+Create a Render **Web Service** connected to this Git repository and branch:
 
-### Deployment Steps
+| Setting | Value |
+|---|---|
+| Root Directory | `backend` |
+| Runtime | Python |
+| Build Command | `pip install -r requirements.txt` |
+| Start Command | `uvicorn app.main:app --host 0.0.0.0 --port $PORT` |
+| Health Check Path | `/health` |
+| Region | Same region as the Render PostgreSQL database |
 
-1. Deploy PostgreSQL database
-2. Set environment variables in hosting platform
-3. Run database migrations: `alembic upgrade head`
-4. Deploy backend (Python + FastAPI)
-5. Build and deploy frontend (React + Vite)
-6. Configure CORS to allow frontend domain
-7. Test end-to-end functionality
+Set these environment variables in the Render service settings:
+
+| Variable | Value |
+|---|---|
+| `DATABASE_URL` | Render PostgreSQL **Internal Database URL** |
+| `DEBUG` | `false` |
+| `GROQ_API_KEY` | Your valid Groq API key (secret) |
+| `GROQ_MODEL` | `openai/gpt-oss-120b` (or a model available to your Groq account) |
+| `GROQ_BASE_URL` | `https://api.groq.com/openai/v1` |
+| `CORS_ORIGINS` | JSON array of exact frontend origins, e.g. `["https://your-app.vercel.app"]` |
+| `MAX_UPLOAD_SIZE_MB` | `10` |
+
+Add the Vercel custom domain to `CORS_ORIGINS` too if you use one. Use an exact origin (scheme and host, without a path or trailing slash); do not use `*`. If your Vercel preview deployments need API access, list each permitted preview origin explicitly.
+
+For the current frontend, set `CORS_ORIGINS` to `["https://contract-obligation-assistant.vercel.app"]`.
+
+**Database migrations must run before the API is used.** If the Render service provides a Pre-Deploy Command, set it to `alembic upgrade head`. Otherwise, run `alembic upgrade head` once from the service's Shell, with the service's `DATABASE_URL` configured. Run it again after deploying future commits that add migrations. Do not run schema creation manually.
+
+After deployment, copy the service URL, such as `https://your-api.onrender.com`. Check `https://your-api.onrender.com/health` and confirm it returns JSON with `"status":"healthy"`. The `/health` endpoint only checks that the application started; verify the database separately with `/api/contracts`.
+
+### 3. Deploy the React frontend to Vercel
+
+1. Import the same Git repository into Vercel.
+2. Set **Root Directory** to `frontend` and keep the framework preset as **Vite**.
+3. Use `npm install` as the install command, `npm run build` as the build command, and `dist` as the output directory.
+4. Add this Vercel environment variable for **Production** (and Preview too if previews should access the API):
+
+   | Variable | Value |
+   |---|---|
+   | `VITE_API_BASE_URL` | `https://contract-obligation-assistant.onrender.com` |
+
+   Do not append `/api`; the frontend adds that path itself. This value is compiled into the frontend at build time, so redeploy Vercel after changing it.
+
+The checked-in `frontend/vercel.json` rewrites client-side routes to `index.html`, so refreshing `/review` or `/deadlines` works on Vercel.
+
+### 4. Verify the complete deployment
+
+After committing and deploying these settings to both services:
+
+1. Visit `https://contract-obligation-assistant.onrender.com/health`; expect HTTP 200.
+2. Visit `https://contract-obligation-assistant.onrender.com/api/contracts`; expect JSON (an empty contracts list is valid on a new database).
+3. Open the Vercel URL and check the browser's Network panel. Requests for `/api/...` must go to the Render API origin and return successfully, not to Vercel.
+4. Upload a small text-based PDF or DOCX, load its analysis, and verify the records persist after refreshing the page.
+5. Try an AI analysis only after setting a valid server-side `GROQ_API_KEY`. Never set this secret as a `VITE_*` variable.
+
+The Render free web-service plan may sleep when idle; its first request after sleeping can be slow. PostgreSQL plan retention and pricing vary, so check Render's current plan terms before choosing one for data you need to keep.
+
+**Security note:** This application does not currently provide user authentication or authorization. Do not upload confidential contracts or expose the service for general use until access controls are added.
 
 ## Completed Scope
 

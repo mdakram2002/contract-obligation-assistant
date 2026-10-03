@@ -74,7 +74,7 @@ class AmbiguityResponse(BaseModel):
     description: str
     conflicting_clauses: Optional[List[str]] = None
     certainty: str
-    source_sections: Optional[List[str]] = None
+    source_sections: Optional[List[Optional[str]]] = None
     source_pages: Optional[List[Optional[int]]] = None
     source_quotes: Optional[List[str]] = None
     notes: Optional[str] = None
@@ -82,7 +82,7 @@ class AmbiguityResponse(BaseModel):
     created_at: datetime
 
     class Config:
-        from_attributes = False
+        from_attributes = True
 
 
 class ClarificationQuestionResponse(BaseModel):
@@ -90,7 +90,7 @@ class ClarificationQuestionResponse(BaseModel):
     question: str
     related_clauses: Optional[List[str]] = None
     context: Optional[str] = None
-    source_sections: Optional[List[str]] = None
+    source_sections: Optional[List[Optional[str]]] = None
     source_pages: Optional[List[Optional[int]]] = None
     source_quotes: Optional[List[str]] = None
     answered: str
@@ -98,7 +98,7 @@ class ClarificationQuestionResponse(BaseModel):
     created_at: datetime
 
     class Config:
-        from_attributes = False
+        from_attributes = True
 
 
 class AnalysisResponse(BaseModel):

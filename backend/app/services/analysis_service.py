@@ -16,7 +16,10 @@ from app.models.clarification_question import ClarificationQuestion
 from app.models.ai_run import AIRun, AIRunStatus
 from app.ai.schemas import ContractAnalysis, SourceEvidence
 from app.services.contract_analyzer import ContractAnalyzer
+from app.services.clarification_detection import ClarificationDetectionService
 from app.services.date_calculator import DateCalculator
+from app.services.obligation_detection import ObligationDetectionService
+from app.services.stale_detection import StaleDetectionService
 from app.config import settings
 import logging
 
@@ -219,6 +222,14 @@ class AnalysisService:
         )
         extraction = extraction_result.scalar_one_or_none()
         if extraction and extraction.status == "completed":
+            await ObligationDetectionService.ensure_for_version(
+                contract_version, db
+            )
+            await ClarificationDetectionService.ensure_for_version(
+                contract_version, db
+            )
+            await StaleDetectionService.detect_stale_items(contract_version_id, db)
+            await db.commit()
             return {
                 "ai_run_id": extraction.ai_run_id,
                 "status": "already_exists",
@@ -251,6 +262,13 @@ class AnalysisService:
             extraction.status = "completed"
             extraction.ai_run_id = ai_run.id if ai_run else None
             extraction.completed_at = datetime.utcnow()
+            await ObligationDetectionService.ensure_for_version(
+                contract_version, db
+            )
+            await ClarificationDetectionService.ensure_for_version(
+                contract_version, db
+            )
+            await StaleDetectionService.detect_stale_items(contract_version_id, db)
             await db.commit()
             logger.info(
                 "Existing extraction reused for contract_version_id=%s",
@@ -435,6 +453,13 @@ class AnalysisService:
                     )
                     db.add(question_db)
 
+            await ObligationDetectionService.ensure_for_version(
+                contract_version, db
+            )
+            await ClarificationDetectionService.ensure_for_version(
+                contract_version, db
+            )
+
             # Update AI run record
             end_time = datetime.utcnow()
             duration_ms = int((end_time - start_time).total_seconds() * 1000)
@@ -445,6 +470,7 @@ class AnalysisService:
             extraction.status = "completed"
             extraction.completed_at = end_time
 
+            await StaleDetectionService.detect_stale_items(contract_version_id, db)
             await db.commit()
             await db.refresh(ai_run)
 

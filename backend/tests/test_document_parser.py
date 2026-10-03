@@ -1,4 +1,7 @@
+from io import BytesIO
+
 import pytest
+from docx import Document
 from app.services.document_parser import DocumentParser
 
 
@@ -65,3 +68,15 @@ class TestDocumentParser:
         docx_content = b"PK\x03\x04\n\x00\x00\x00"
         with pytest.raises(Exception):
             DocumentParser.parse_document(docx_content, "docx")
+
+    def test_parse_docx_bytes(self):
+        document = Document()
+        document.add_paragraph("Agreement section one.")
+        file_bytes = BytesIO()
+        document.save(file_bytes)
+
+        text, metadata = DocumentParser.parse_docx(file_bytes.getvalue())
+
+        assert text == "Agreement section one."
+        assert metadata is not None
+        assert metadata["type"] == "docx"

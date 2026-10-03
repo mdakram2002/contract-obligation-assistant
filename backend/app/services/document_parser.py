@@ -1,5 +1,6 @@
 import fitz  # PyMuPDF
 from docx import Document
+from io import BytesIO
 from typing import Tuple, Optional
 import logging
 
@@ -31,6 +32,8 @@ class DocumentParser:
                     })
 
             full_text = "\n\n".join(text_parts)
+            if not full_text.strip():
+                raise ValueError("PDF contains no extractable text")
             metadata = {
                 "type": "pdf",
                 "total_pages": len(doc),
@@ -52,7 +55,7 @@ class DocumentParser:
         Returns (text, metadata) where metadata contains structure information.
         """
         try:
-            doc = Document(file_bytes)
+            doc = Document(BytesIO(file_bytes))
             text_parts = []
             paragraph_info = []
 
@@ -65,7 +68,15 @@ class DocumentParser:
                         "length": len(para.text)
                     })
 
+            for table in doc.tables:
+                for row in table.rows:
+                    cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+                    if cells:
+                        text_parts.append(" | ".join(cells))
+
             full_text = "\n\n".join(text_parts)
+            if not full_text.strip():
+                raise ValueError("DOCX contains no extractable text")
             metadata = {
                 "type": "docx",
                 "total_paragraphs": len(doc.paragraphs),
@@ -86,6 +97,8 @@ class DocumentParser:
         Returns (text, metadata) where metadata contains structure information.
         """
         try:
+            if not text or not text.strip():
+                raise ValueError("Text cannot be empty")
             lines = text.split('\n')
             sections = []
             current_section = []
@@ -112,6 +125,7 @@ class DocumentParser:
             full_text = '\n\n'.join(sections)
             metadata = {
                 "type": "text",
+                "char_count": len(full_text),
                 "total_sections": section_count,
                 "sections": [{"index": i, "length": len(s)} for i, s in enumerate(sections)]
             }
@@ -146,11 +160,15 @@ class DocumentParser:
 
         if filename_lower.endswith('.pdf'):
             # Quick validation: check PDF signature
+            if file_bytes[:4] == b'PK\x03\x04':
+                raise ValueError("File extension does not match content")
             if file_bytes[:4] != b'%PDF':
                 raise ValueError("Invalid PDF file")
             return 'pdf'
         elif filename_lower.endswith('.docx'):
             # Quick validation: check DOCX signature
+            if file_bytes[:4] == b'%PDF':
+                raise ValueError("File extension does not match content")
             if file_bytes[:4] != b'PK\x03\x04':
                 raise ValueError("Invalid DOCX file")
             return 'docx'

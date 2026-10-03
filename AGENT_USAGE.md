@@ -898,3 +898,45 @@ Handle valid AI analysis responses that omit notice-term or obligation arrays.
 **Verification:**
 - Validated a representative analysis payload without either field using Pydantic; validation succeeded and both fields resolved to empty lists.
 - Confirmed the updated schema has no Python syntax errors.
+
+### Phase 19 — Final Assessment Requirements Audit
+
+**Task:**
+Audit the existing implementation against the Aggroso Problem 1 assessment requirements and fix only verified gaps.
+
+**Representative Prompt:**
+"Perform a final requirements audit of the Contract Obligation and Renewal Assistant against the Aggroso Problem 1 assessment requirements."
+
+**Tools Used:**
+- VS Code Pylance runtime and diagnostics
+- Workspace file read/search/edit tools
+- PowerShell, pytest, and npm
+- Local browser and HTTP smoke checks
+
+**Result:**
+- Found that the stored test-contract extraction contained conflicting expiry and termination terms, conflicting renewal conditions, and explicit missing-information statements, but had no persisted ambiguities or clarification questions.
+- Added a deterministic backend pass that creates evidence-backed ambiguity and clarification records from conflicting extracted values and explicit missing-information text. It runs on both new and previously completed extractions and is idempotent.
+- Added an evidence-backed fallback for five omitted obligations, preserving their event-relative wording without fabricating calendar dates.
+- Added review status to dated and undated deadline responses and exposed it in the Deadlines page so pending AI candidates are not presented without their approval state. Monthly and quarterly items are classified as recurring when their evidence shows a cycle.
+- Updated README setup, workflow, and limitations, including the actual Python minimum, clarification/obligation detection, and the lack of business-day arithmetic.
+- Did not call the external LLM or delegate work during this audit.
+
+**Important Issue and Decision:**
+- Existing AI output had omitted the contract's actual conflicts and missing-information questions. Rather than re-send contract content to an external provider, added a deterministic evidence-based fallback using the persisted extracted terms and explicit statements in the stored contract text.
+- No delegated suggestions were received or rejected during this audit.
+
+**Verification:**
+- Ran the full backend test suite: 48 passed. Existing dependency and Python deprecation warnings remain.
+- Ran `npm run build`: TypeScript and Vite build passed.
+- Pylance diagnostics reported no errors in the changed Python files.
+- Checked the stored test contract locally: the detector produced ten evidence-backed findings for the expiry, renewal, termination, notice-delivery, responsible-party, holiday-calendar, material-change, and SLA-credit gaps.
+- Exercised persistence twice in a transaction: the first pass created five missing obligations and ten ambiguities/questions; the second created none. The deadline service returned nine undated obligations and no dated obligation deadlines. Rolled the transaction back and verified no test records remained.
+- Browser-checked the local Dashboard and Deadlines page. The 15 Aug and 16 Aug 2027 candidates appeared low-certainty and pending review; unknown-trigger obligations appeared without fabricated dates.
+- Local frontend, backend health, and frontend API-proxy requests returned HTTP 200; the proxy returned five contracts.
+- Confirmed `.env` files are not tracked, sensitive values in `.env.example` are blank, and no credential-pattern matches were found in tracked frontend files.
+
+**Remaining Limitations:**
+- No production deployment URL was provided, so production availability and database/LLM integration were not verified.
+- No live LLM round-trip was performed.
+- Business-day arithmetic is not implemented; business-day deadlines remain undated. The test contract also lacks a reference date/event and an applicable holiday calendar.
+- Authentication and role-based access are not implemented.

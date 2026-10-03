@@ -90,8 +90,8 @@ async def analyze_contract(
         parties=parties,
         extracted_items=extracted_items,
         obligations=obligations,
-        ambiguities=[],  # Skip ambiguities for now due to NULL values
-        clarification_questions=[],  # Skip questions for now due to NULL values
+        ambiguities=ambiguities,
+        clarification_questions=questions,
         ai_run_id=result["ai_run_id"],
         analysis_status=result["status"]
     )

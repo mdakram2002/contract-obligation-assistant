@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     DEBUG: bool = True
 
     # Database (PostgreSQL for production)
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:AkramPostgres123@localhost:5432/contract_assistant"
+    DATABASE_URL: str = "postgresql+asyncpg://localhost:5432/contract_assistant"
 
     # AI/LLM (Groq AI - OpenAI compatible)
     GROQ_API_KEY: str = "placeholder_key"

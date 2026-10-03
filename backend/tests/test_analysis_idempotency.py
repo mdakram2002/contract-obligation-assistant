@@ -30,6 +30,7 @@ from app.ai.schemas import (
     NoticeTerm,
 )
 from app.services.analysis_service import AnalysisService
+from app.services.stale_detection import StaleDetectionService
 
 
 TABLES = [
@@ -71,7 +72,7 @@ def sample_analysis() -> ContractAnalysis:
         RenewalTerm(
             description=f"Renewal fact {number}",
             notice_period_days=30 + number,
-            automatic=number == 1,
+            automatic=None,
             certainty=CertaintyLevel.HIGH,
             source=evidence(f"3.{number}", f"Renewal clause {number}"),
         )
@@ -317,6 +318,49 @@ async def _test_legacy_duplicates_are_collapsed_without_rerunning_analysis(analy
 
 def test_legacy_duplicates_are_collapsed_without_rerunning_analysis():
     asyncio.run(with_analysis_db(_test_legacy_duplicates_are_collapsed_without_rerunning_analysis))
+
+
+async def _test_stale_detection_waits_for_new_version_analysis(db):
+    first_version = await create_contract_version(db)
+    original = ExtractedItem(
+        contract_version_id=first_version.id,
+        item_type=ItemType.EXPIRY,
+        title="Expiry Clause",
+        value="2027-10-14",
+        date_value=datetime(2027, 10, 14),
+        description="User-confirmed expiry date",
+        review_status=ReviewStatus.APPROVED,
+        user_edited="true",
+    )
+    db.add(original)
+    second_version = ContractVersion(
+        contract_id=first_version.contract_id,
+        version_number=2,
+        raw_text="Updated sample contract text",
+    )
+    db.add(second_version)
+    await db.commit()
+
+    upload_result = await StaleDetectionService.detect_stale_items(
+        second_version.id, db
+    )
+    await db.refresh(original)
+    assert upload_result["stale_count"] == 0
+    assert original.is_stale == "false"
+
+    service = AnalysisService()
+    service.analyzer.analyze = AsyncMock(return_value=sample_analysis())
+    await service.analyze_contract_version(second_version.id, db)
+
+    await db.refresh(original)
+    assert original.is_stale == "true"
+    assert original.review_status == ReviewStatus.APPROVED
+    assert original.user_edited == "true"
+    assert original.description == "User-confirmed expiry date"
+
+
+def test_stale_detection_waits_for_new_version_analysis():
+    asyncio.run(with_analysis_db(_test_stale_detection_waits_for_new_version_analysis))
 
 
 async def _test_extraction_marker_is_unique_per_version(db):

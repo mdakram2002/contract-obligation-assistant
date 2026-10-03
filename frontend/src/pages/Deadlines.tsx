@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { api, Deadline, Contract, ContractVersion } from '../services/api';
+import { api, Deadline, UndatedObligation, Contract, ContractVersion } from '../services/api';
 
 function Deadlines() {
   const [versionId, setVersionId] = useState('');
@@ -11,6 +11,7 @@ function Deadlines() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [deadlines, setDeadlines] = useState<Deadline[]>([]);
+  const [undatedObligations, setUndatedObligations] = useState<UndatedObligation[]>([]);
 
   const location = useLocation();
   useEffect(() => {
@@ -46,6 +47,7 @@ function Deadlines() {
     setSelectedContract(contractId);
     setVersionId('');
     setDeadlines([]);
+    setUndatedObligations([]);
     setError('');
     await loadContractVersions(contractId);
   };
@@ -73,12 +75,16 @@ function Deadlines() {
         selectedContract || undefined
       );
       setDeadlines(result.deadlines);
+      setUndatedObligations(result.undated_obligations);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Calculation failed');
     } finally {
       setLoading(false);
     }
   };
+
+  const reviewStatusLabel = (status: string) =>
+    status === 'pending' ? 'Pending review' : status.replace(/_/g, ' ');
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -179,11 +185,14 @@ function Deadlines() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Certainty
                 </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Review Status
+                </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {deadlines.map((deadline) => (
-                <tr key={deadline.id}>
+                <tr key={`${deadline.id}-${deadline.type}-${deadline.deadline}`}>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {deadline.description}
                   </td>
@@ -205,6 +214,9 @@ function Deadlines() {
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 capitalize">
                     {deadline.certainty}
                   </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 capitalize">
+                    {reviewStatusLabel(deadline.review_status)}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -212,7 +224,51 @@ function Deadlines() {
         </div>
       )}
 
-      {deadlines.length === 0 && !loading && versionId && (
+      {undatedObligations.length > 0 && (
+        <div className="mt-6 bg-white shadow rounded-lg p-6">
+          <h2 className="text-xl font-semibold mb-4">
+            Obligations Without a Confirmed Calendar Date
+          </h2>
+          <div className="space-y-4">
+            {undatedObligations.map((obligation) => (
+              <div key={obligation.id} className="border rounded-lg p-4">
+                <div className="flex flex-wrap justify-between gap-2">
+                  <p className="font-medium text-gray-900">{obligation.description}</p>
+                  <span className="text-sm font-medium text-amber-700">
+                    {obligation.timing_kind === 'recurring'
+                      ? 'Recurring'
+                      : obligation.timing_kind === 'trigger_dependent'
+                        ? 'Trigger-dependent'
+                        : 'Timing not specified'}
+                  </span>
+                </div>
+                {obligation.timing_description && (
+                  <p className="mt-2 text-sm text-gray-600">
+                    Timing: {obligation.timing_description}
+                  </p>
+                )}
+                {obligation.source_section && (
+                  <p className="mt-2 text-xs text-gray-500">
+                    Section: {obligation.source_section}
+                  </p>
+                )}
+                {obligation.source_quote && (
+                  <blockquote className="mt-2 text-sm italic text-gray-500">
+                    "{obligation.source_quote}"
+                  </blockquote>
+                )}
+                <p className="mt-2 text-xs text-gray-500 capitalize">
+                  Certainty: {obligation.certainty}. Review status:{' '}
+                  {reviewStatusLabel(obligation.review_status)}. No date is calculated until the required
+                  event/date is known.
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {deadlines.length === 0 && undatedObligations.length === 0 && !loading && versionId && (
         <div className="text-center py-12 bg-white rounded-lg shadow">
           <svg
             className="mx-auto h-12 w-12 text-gray-400"

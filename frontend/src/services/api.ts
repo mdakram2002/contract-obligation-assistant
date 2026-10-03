@@ -122,7 +122,7 @@ export interface Ambiguity {
   description: string;
   conflicting_clauses?: string[];
   certainty: string;
-  source_sections?: string[];
+  source_sections?: (string | null)[];
   source_pages?: number[];
   source_quotes?: string[];
   notes?: string;
@@ -135,7 +135,7 @@ export interface ClarificationQuestion {
   question: string;
   related_clauses?: string[];
   context?: string;
-  source_sections?: string[];
+  source_sections?: (string | null)[];
   source_pages?: number[];
   source_quotes?: string[];
   answered: string;
@@ -162,6 +162,18 @@ export interface Deadline {
   type: string;
   source_section?: string;
   certainty: string;
+  review_status: string;
+}
+
+export interface UndatedObligation {
+  id: string;
+  description: string;
+  timing_description?: string;
+  timing_kind: 'recurring' | 'trigger_dependent' | 'unspecified';
+  source_section?: string;
+  source_quote?: string;
+  certainty: string;
+  review_status: string;
 }
 
 class APIService {
@@ -298,7 +310,11 @@ class APIService {
     contractVersionId: string,
     daysAhead: number = 90,
     contractId?: string
-  ): Promise<{ deadlines: Deadline[]; total: number }> {
+  ): Promise<{
+    deadlines: Deadline[];
+    total: number;
+    undated_obligations: UndatedObligation[];
+  }> {
     return this.request(`/deadlines/calculate?days_ahead=${daysAhead}`, {
       method: 'POST',
       body: JSON.stringify({

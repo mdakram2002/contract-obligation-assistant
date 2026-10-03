@@ -87,6 +87,29 @@ function Review() {
     }
   };
 
+  const handleEdit = async (
+    itemId: string,
+    itemType: 'extracted_item' | 'obligation',
+    field: string,
+    currentValue: string
+  ) => {
+    const updatedValue = window.prompt('Update this value:', currentValue);
+    if (updatedValue === null) {
+      return;
+    }
+    if (!updatedValue.trim()) {
+      setError('Edited values cannot be empty.');
+      return;
+    }
+
+    try {
+      await api.editItem(itemId, itemType, { [field]: updatedValue.trim() });
+      await handleAnalyze();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Edit failed');
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <h1 className="text-3xl font-bold text-gray-900 mb-8">Review Workspace</h1>
@@ -148,6 +171,60 @@ function Review() {
 
       {analysis && (
         <div className="space-y-6">
+          {analysis.ambiguities?.length > 0 && (
+            <div className="bg-amber-50 border border-amber-200 shadow rounded-lg p-6">
+              <h2 className="text-xl font-semibold mb-4">Unresolved Conflicts and Ambiguities</h2>
+              <div className="space-y-4">
+                {analysis.ambiguities.map((ambiguity: any) => (
+                  <div key={ambiguity.id} className="border border-amber-200 rounded-lg p-4">
+                    <div className="flex justify-between gap-4">
+                      <p className="font-medium">{ambiguity.description}</p>
+                      <span className="text-sm capitalize">Certainty: {ambiguity.certainty}</span>
+                    </div>
+                    {ambiguity.conflicting_clauses?.length > 0 && (
+                      <p className="mt-2 text-sm text-gray-700">
+                        Clauses: {ambiguity.conflicting_clauses.join('; ')}
+                      </p>
+                    )}
+                    {ambiguity.notes && (
+                      <p className="mt-2 text-sm text-gray-600">{ambiguity.notes}</p>
+                    )}
+                    {ambiguity.source_quotes?.map((quote: string, index: number) => (
+                      <blockquote key={index} className="mt-2 text-sm italic text-gray-600">
+                        {ambiguity.source_sections?.[index] &&
+                          `Section ${ambiguity.source_sections[index]}: `}
+                        "{quote}"
+                      </blockquote>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {analysis.clarification_questions?.length > 0 && (
+            <div className="bg-blue-50 border border-blue-200 shadow rounded-lg p-6">
+              <h2 className="text-xl font-semibold mb-4">Clarification Questions</h2>
+              <div className="space-y-4">
+                {analysis.clarification_questions.map((question: any) => (
+                  <div key={question.id} className="border border-blue-200 rounded-lg p-4">
+                    <p className="font-medium">{question.question}</p>
+                    {question.context && (
+                      <p className="mt-2 text-sm text-gray-600">{question.context}</p>
+                    )}
+                    {question.source_quotes?.map((quote: string, index: number) => (
+                      <blockquote key={index} className="mt-2 text-sm italic text-gray-600">
+                        {question.source_sections?.[index] &&
+                          `Section ${question.source_sections[index]}: `}
+                        "{quote}"
+                      </blockquote>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Parties */}
           {analysis.parties && analysis.parties.length > 0 && (
             <div className="bg-white shadow rounded-lg p-6">
@@ -191,10 +268,28 @@ function Review() {
                         {item.review_status}
                       </span>
                     </div>
+                    <div className="flex flex-wrap gap-3 text-xs text-gray-500">
+                      <span>Certainty: {item.certainty}</span>
+                      {item.source_page && <span>Page: {item.source_page}</span>}
+                      {item.is_stale === 'true' && (
+                        <span className="font-semibold text-amber-700">Potentially stale</span>
+                      )}
+                    </div>
                     {item.source_quote && (
                       <p className="text-sm text-gray-500 italic mt-2">"{item.source_quote}"</p>
                     )}
                     <div className="mt-3 flex gap-2">
+                      <button
+                        onClick={() => handleEdit(
+                          item.id,
+                          'extracted_item',
+                          item.description ? 'description' : 'value',
+                          item.description || item.value || ''
+                        )}
+                        className="bg-gray-600 text-white px-3 py-1 rounded text-sm hover:bg-gray-700"
+                      >
+                        Edit
+                      </button>
                       {item.review_status === 'pending' && (
                         <>
                           <button
@@ -248,10 +343,28 @@ function Review() {
                         {obligation.review_status}
                       </span>
                     </div>
+                    <div className="flex flex-wrap gap-3 text-xs text-gray-500">
+                      <span>Certainty: {obligation.certainty}</span>
+                      {obligation.source_page && <span>Page: {obligation.source_page}</span>}
+                      {obligation.is_stale === 'true' && (
+                        <span className="font-semibold text-amber-700">Potentially stale</span>
+                      )}
+                    </div>
                     {obligation.source_quote && (
                       <p className="text-sm text-gray-500 italic mt-2">"{obligation.source_quote}"</p>
                     )}
                     <div className="mt-3 flex gap-2">
+                      <button
+                        onClick={() => handleEdit(
+                          obligation.id,
+                          'obligation',
+                          'description',
+                          obligation.description
+                        )}
+                        className="bg-gray-600 text-white px-3 py-1 rounded text-sm hover:bg-gray-700"
+                      >
+                        Edit
+                      </button>
                       {obligation.review_status === 'pending' && (
                         <>
                           <button

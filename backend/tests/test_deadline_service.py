@@ -132,6 +132,9 @@ def test_expiry_and_sixty_day_renewal_appear_in_selected_window():
         assert [
             (item.type, item.deadline) for item in medium_window.deadlines
         ] == [("renewal", date(2027, 1, 30))]
+        assert medium_window.deadlines[0].description == (
+            "Renewal discussion deadline (60 days before expiry)"
+        )
 
         result = await DeadlineService.calculate_for_version(
             contract_version_id=version.id,
@@ -141,6 +144,25 @@ def test_expiry_and_sixty_day_renewal_appear_in_selected_window():
             today=date(2026, 10, 3),
         )
         assert result.total == 2
+        assert {
+            item.timing_kind for item in result.undated_obligations
+        } == {"recurring", "trigger_dependent"}
+        assert {
+            item.timing_description for item in result.undated_obligations
+        } == {
+            "5 business days after month-end",
+            "24 hours after becoming aware of outage",
+            "30 calendar days after invoice receipt",
+        }
+        assert all(
+            item.review_status == ReviewStatus.PENDING.value
+            for item in result.undated_obligations
+        )
+        assert all(item.type != "obligation" for item in result.deadlines)
+        assert all(
+            item.review_status == ReviewStatus.PENDING.value
+            for item in result.deadlines
+        )
         actual = {(item.type, item.deadline) for item in result.deadlines}
         assert actual == {
             ("expiry", date(2027, 3, 31)),
@@ -153,6 +175,97 @@ def test_expiry_and_sixty_day_renewal_appear_in_selected_window():
             date(2027, 1, 30),
             date(2027, 3, 31),
         }
+
+    asyncio.run(with_database(test))
+
+
+def test_recurring_obligations_are_shown_without_fabricated_dates():
+    async def test(db):
+        contract, version = await make_version(db)
+        obligation = Obligation(
+            contract_version_id=version.id,
+            description="Send status reports",
+            deadline_description="By the fifth business day of each month",
+            deadline=None,
+            review_status=ReviewStatus.PENDING,
+        )
+        db.add(obligation)
+        await db.commit()
+
+        result = await DeadlineService.calculate_for_version(
+            contract_version_id=version.id,
+            contract_id=contract.id,
+            days_ahead=180,
+            db=db,
+            today=date(2026, 10, 3),
+        )
+
+        assert result.deadlines == []
+        assert result.total == 0
+        assert len(result.undated_obligations) == 1
+        assert result.undated_obligations[0].timing_kind == "recurring"
+        assert result.undated_obligations[0].timing_description == (
+            "By the fifth business day of each month"
+        )
+
+    asyncio.run(with_database(test))
+
+
+def test_conflicting_expiry_dates_keep_renewal_candidates_uncertain():
+    async def test(db):
+        contract, version = await make_version(db)
+        for expiry_date in (date(2027, 10, 14), date(2027, 10, 15)):
+            db.add(
+                ExtractedItem(
+                    contract_version_id=version.id,
+                    item_type=ItemType.EXPIRY,
+                    title="Expiry Clause",
+                    value=expiry_date.isoformat(),
+                    date_value=datetime.combine(expiry_date, datetime.min.time()),
+                    description=f"Expiry on {expiry_date.isoformat()}",
+                    review_status=ReviewStatus.PENDING,
+                    source_quote=f"Agreement expires on {expiry_date.isoformat()}",
+                )
+            )
+        db.add(
+            ExtractedItem(
+                contract_version_id=version.id,
+                item_type=ItemType.RENEWAL,
+                title="Renewal Term",
+                description="Automatic renewal unless notice is given",
+                notice_period_days=60,
+                review_status=ReviewStatus.PENDING,
+                source_quote="Give notice 60 days before expiry",
+            )
+        )
+        await db.commit()
+
+        result = await DeadlineService.calculate_for_version(
+            contract_version_id=version.id,
+            contract_id=contract.id,
+            days_ahead=365,
+            db=db,
+            today=date(2027, 6, 1),
+        )
+
+        renewal_dates = {
+            item.deadline: item
+            for item in result.deadlines
+            if item.type == "renewal"
+        }
+        assert set(renewal_dates) == {date(2027, 8, 15), date(2027, 8, 16)}
+        assert all(item.certainty == "low" for item in renewal_dates.values())
+        assert all(
+            item.review_status == ReviewStatus.PENDING.value
+            for item in renewal_dates.values()
+        )
+        assert all(
+            item.description.startswith("Uncertain renewal notice deadline")
+            for item in renewal_dates.values()
+        )
+        expiry_items = [item for item in result.deadlines if item.type == "expiry"]
+        assert len(expiry_items) == 2
+        assert all(item.certainty == "low" for item in expiry_items)
 
     asyncio.run(with_database(test))
 

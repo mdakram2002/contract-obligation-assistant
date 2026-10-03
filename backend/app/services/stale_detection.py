@@ -60,6 +60,18 @@ class StaleDetectionService:
         )
         new_obligations = new_obligations_result.scalars().all()
 
+        if not new_items and not new_obligations:
+            logger.info(
+                "Stale detection deferred until analysis completes for version_id=%s",
+                new_version.id,
+            )
+            return {
+                "stale_count": 0,
+                "changed_fields": [],
+                "previous_version": prev_version.version_number,
+                "new_version": new_version.version_number,
+            }
+
         prev_obligations_result = await db.execute(
             select(Obligation).where(Obligation.contract_version_id == prev_version.id)
         )
@@ -69,61 +81,85 @@ class StaleDetectionService:
         stale_count = 0
         changed_fields = []
 
-        # Compare extracted items by type and title
-        prev_items_dict = {(item.item_type, item.title): item for item in prev_items}
-        new_items_dict = {(item.item_type, item.title): item for item in new_items}
+        # Keep all records with the same key so conflicting clauses are compared.
+        prev_item_groups = {}
+        for item in prev_items:
+            prev_item_groups.setdefault((item.item_type, item.title), []).append(item)
+        new_item_groups = {}
+        for item in new_items:
+            new_item_groups.setdefault((item.item_type, item.title), []).append(item)
 
-        for key, prev_item in prev_items_dict.items():
-            if key in new_items_dict:
-                new_item = new_items_dict[key]
-                # Check for significant changes
-                if StaleDetectionService._items_differ(prev_item, new_item):
-                    # Mark previous item as stale
-                    prev_item.is_stale = "true"
+        for key, previous_group in prev_item_groups.items():
+            current_group = list(new_item_groups.get(key, []))
+            changed = len(previous_group) != len(current_group)
+            for previous_item in previous_group:
+                match_index = next(
+                    (
+                        index
+                        for index, current_item in enumerate(current_group)
+                        if not StaleDetectionService._items_differ(
+                            previous_item, current_item
+                        )
+                    ),
+                    None,
+                )
+                if match_index is None:
+                    changed = True
+                else:
+                    current_group.pop(match_index)
+
+            if changed:
+                for previous_item in previous_group:
+                    previous_item.is_stale = "true"
                     stale_count += 1
                     changed_fields.append({
                         "type": "extracted_item",
-                        "item_type": prev_item.item_type,
-                        "title": prev_item.title,
-                        "change": "value_changed"
+                        "item_type": previous_item.item_type,
+                        "title": previous_item.title,
+                        "change": (
+                            "value_changed" if new_item_groups.get(key) else "removed"
+                        ),
                     })
-            else:
-                # Item removed in new version
-                prev_item.is_stale = "true"
-                stale_count += 1
-                changed_fields.append({
-                    "type": "extracted_item",
-                    "item_type": prev_item.item_type,
-                    "title": prev_item.title,
-                    "change": "removed"
-                })
 
-        # Compare obligations by description
-        prev_obligations_dict = {oblig.description: obligation for obligation in prev_obligations}
-        new_obligations_dict = {oblig.description: obligation for obligation in new_obligations}
+        prev_obligation_groups = {}
+        for obligation in prev_obligations:
+            prev_obligation_groups.setdefault(obligation.description, []).append(obligation)
+        new_obligation_groups = {}
+        for obligation in new_obligations:
+            new_obligation_groups.setdefault(obligation.description, []).append(obligation)
 
-        for key, prev_oblig in prev_obligations_dict.items():
-            if key in new_obligations_dict:
-                new_oblig = new_obligations_dict[key]
-                # Check for significant changes
-                if StaleDetectionService._obligations_differ(prev_oblig, new_oblig):
-                    # Mark previous obligation as stale
-                    prev_oblig.is_stale = "true"
+        for key, previous_group in prev_obligation_groups.items():
+            current_group = list(new_obligation_groups.get(key, []))
+            changed = len(previous_group) != len(current_group)
+            for previous_obligation in previous_group:
+                match_index = next(
+                    (
+                        index
+                        for index, current_obligation in enumerate(current_group)
+                        if not StaleDetectionService._obligations_differ(
+                            previous_obligation, current_obligation
+                        )
+                    ),
+                    None,
+                )
+                if match_index is None:
+                    changed = True
+                else:
+                    current_group.pop(match_index)
+
+            if changed:
+                for previous_obligation in previous_group:
+                    previous_obligation.is_stale = "true"
                     stale_count += 1
                     changed_fields.append({
                         "type": "obligation",
-                        "description": prev_oblig.description,
-                        "change": "value_changed"
+                        "description": previous_obligation.description,
+                        "change": (
+                            "value_changed"
+                            if new_obligation_groups.get(key)
+                            else "removed"
+                        ),
                     })
-            else:
-                # Obligation removed in new version
-                prev_oblig.is_stale = "true"
-                stale_count += 1
-                changed_fields.append({
-                    "type": "obligation",
-                    "description": prev_oblig.description,
-                    "change": "removed"
-                })
 
         await db.commit()
 
@@ -151,6 +187,14 @@ class StaleDetectionService:
             return True
         if prev_item.date_value != new_item.date_value:
             return True
+        if prev_item.automatic != new_item.automatic:
+            return True
+        if prev_item.conditions != new_item.conditions:
+            return True
+        if prev_item.purpose != new_item.purpose:
+            return True
+        if prev_item.source_quote != new_item.source_quote:
+            return True
         return False
 
     @staticmethod
@@ -162,5 +206,7 @@ class StaleDetectionService:
         if prev_oblig.deadline != new_oblig.deadline:
             return True
         if prev_oblig.deadline_description != new_oblig.deadline_description:
+            return True
+        if prev_oblig.source_quote != new_oblig.source_quote:
             return True
         return False

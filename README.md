@@ -24,7 +24,7 @@ This is an information-management tool, NOT legal advice. All extracted informat
 - **Version Management**: Track contract versions and detect stale information
 - **Dashboard**: View all contracts and their status
 - **Review Workspace**: Comprehensive interface for reviewing extracted data
-- **Deadline Tracking**: View upcoming obligations and renewal deadlines
+- **Deadline Tracking**: View upcoming obligations and renewal deadlines with certainty and review status
 
 ## Architecture
 
@@ -121,6 +121,8 @@ contract-obligation-assistant/
 │   │   │   ├── contract_analyzer.py
 │   │   │   ├── date_calculator.py
 │   │   │   ├── analysis_service.py
+│   │   ├── clarification_detection.py
+│   │   ├── obligation_detection.py
 │   │   │   ├── summary_service.py
 │   │   │   ├── version_service.py
 │   │   │   └── stale_detection.py
@@ -163,13 +165,13 @@ contract-obligation-assistant/
 1. **Document Upload**: User uploads PDF, DOCX, or pastes text
 2. **Text Extraction**: Document parser extracts raw text
 3. **AI Analysis**: LLM analyzes contract and extracts structured data
-4. **Validation**: Pydantic schemas validate AI output
+4. **Validation**: Pydantic schemas validate AI output; an evidence-backed backend pass also detects extracted conflicts and explicit missing-information statements
 5. **Storage**: Extracted data stored with review_status=PENDING
 6. **Human Review**: User reviews and approves/edits/rejects items
 7. **Date Calculation**: Deterministic code calculates deadlines from approved items
 8. **Dashboard**: Users view approved obligations and upcoming deadlines
 
-The AI never approves its own output. Human approval is required for important information.
+The AI never approves its own output. Human approval is required for important information. A backend evidence pass also persists clarification records for conflicting extracted terms and explicit missing-information statements, even when the model omits them.
 
 ## Document Processing
 
@@ -225,13 +227,15 @@ Formulas:
 - Renewal deadline = expiry_date - renewal_notice_period_days
 - Obligation deadlines = stored directly from contract
 
-The Deadlines page defaults to a 180-day window; users can choose between 1 and 365 days. Calculations include explicit expiry dates, renewal/renewal-notice dates derived from an expiry date and notice period, and obligations with a stored calendar deadline. Rejected and stale records are excluded. Relative or recurring descriptions (for example, "within 30 days of invoice receipt") do not become calendar deadlines unless an actual date has been stored.
+The Deadlines page defaults to a 180-day window; users can choose between 1 and 365 days. Calculations include explicit expiry dates, renewal/renewal-notice dates derived from an expiry date and notice period, and obligations with a stored calendar deadline. Conflicting expiry dates produce clearly labeled low-certainty candidate renewal dates. Each dated and undated item also displays whether it is pending review or approved. Obligations without a known calendar date remain visible as trigger-dependent or recurring; no date is invented for unknown event dates. Rejected and stale records are excluded.
+
+Business-day arithmetic is not currently implemented. Obligations that use business days remain undated; calculating them would also require a known reference event/date and the applicable client holiday calendar.
 
 ## Local Setup
 
 ### Prerequisites
 - Node.js 18+
-- Python 3.8+
+- Python 3.10+
 - PostgreSQL 12+
 
 ### Backend Setup
@@ -252,9 +256,11 @@ The requirements select compatible Pydantic and AsyncPG versions for Python 3.14
 
 3. **Configure environment**:
 ```bash
-cp .env.example .env
+cp ../.env.example .env
 # Edit .env with your configuration
 ```
+
+Set `DATABASE_URL` and `GROQ_API_KEY` in `backend/.env` before starting the backend.
 
 4. **Set up database**:
 ```bash
@@ -296,12 +302,12 @@ APP_VERSION=1.0.0
 DEBUG=true
 
 # Database
-DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/contract_assistant
+DATABASE_URL=  # Set this to your PostgreSQL connection string
 
 # AI/LLM
-OPENAI_API_KEY=your_openai_api_key_here
-OPENAI_MODEL=gpt-4o-mini
-OPENAI_BASE_URL=  # Optional: for alternative OpenAI-compatible APIs
+GROQ_API_KEY=your_groq_api_key_here
+GROQ_MODEL=openai/gpt-oss-120b
+GROQ_BASE_URL=https://api.groq.com/openai/v1
 
 # File Upload
 MAX_UPLOAD_SIZE_MB=10
@@ -421,7 +427,7 @@ The application can be deployed using:
 
 1. **AI Accuracy**: AI extraction may have errors. Human review is required.
 2. **Document Format**: Only text-based PDF and DOCX files are supported. Scanned documents require OCR (not implemented).
-3. **Date Parsing**: Complex date expressions may not be parsed correctly.
+3. **Date Parsing and Business Days**: Complex date expressions may not be parsed correctly. Business-day arithmetic is not implemented; those deadlines remain undated until the required event date and holiday calendar are available and supported.
 4. **Legal Advice**: This tool provides information management, not legal advice.
 5. **Single User**: No authentication or multi-user support.
 6. **Performance**: Large documents may take longer to process.
@@ -433,7 +439,7 @@ To evaluate this application:
 
 1. **Set up local environment**:
    - Follow "Local Setup" instructions
-   - Configure `.env` with your OpenAI API key
+   - Configure `backend/.env` with your Groq API key and database URL
    - Start PostgreSQL database
    - Run migrations
 

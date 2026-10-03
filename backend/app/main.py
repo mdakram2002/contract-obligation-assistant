@@ -12,38 +12,39 @@ from app.api.contracts import router as contracts_router
 # Setup logging
 setup_logging()
 
-app = FastAPI(
+api_app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
     debug=settings.DEBUG
 )
 
-# CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 # Include routers
-app.include_router(upload_router)
-app.include_router(analysis_router)
-app.include_router(review_router)
-app.include_router(deadlines_router)
-app.include_router(versions_router)
-app.include_router(contracts_router)
+api_app.include_router(upload_router)
+api_app.include_router(analysis_router)
+api_app.include_router(review_router)
+api_app.include_router(deadlines_router)
+api_app.include_router(versions_router)
+api_app.include_router(contracts_router)
 
 
-@app.get("/health")
+@api_app.get("/health")
 async def health_check():
     return {"status": "healthy", "version": settings.APP_VERSION}
 
 
-@app.get("/")
+@api_app.get("/")
 async def root():
     return {
         "message": "Contract Obligation Assistant API",
         "version": settings.APP_VERSION
     }
+
+
+# Wrap the complete ASGI application so CORS headers are applied to error responses too.
+app = CORSMiddleware(
+    app=api_app,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)

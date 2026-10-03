@@ -885,3 +885,16 @@ Resolve the reported backend dependency/startup errors and investigate why the D
 - Kept deadline derivation deterministic and did not invent calendar dates for relative or recurring obligation descriptions.
 - Excluded rejected and stale records, while allowing pending records to appear so extracted deadlines can be reviewed.
 - Kept changes limited to runtime dependency compatibility and the initial deadline window.
+
+### Phase 18 — AI Analysis Schema Defaults
+
+**Task:**
+Handle valid AI analysis responses that omit notice-term or obligation arrays.
+
+**Result:**
+- Updated `ContractAnalysis` so omitted `notice_terms` and `obligations` fields default to independent empty lists.
+- Left the remaining schema requirements and analysis behavior unchanged.
+
+**Verification:**
+- Validated a representative analysis payload without either field using Pydantic; validation succeeded and both fields resolved to empty lists.
+- Confirmed the updated schema has no Python syntax errors.

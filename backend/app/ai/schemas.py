@@ -95,7 +95,7 @@ class ContractAnalysis(BaseModel):
     expiry_clauses: List[ExpiryClause]
     renewal_terms: List[RenewalTerm]
     termination_terms: List[TerminationTerm]
-    notice_terms: List[NoticeTerm]
-    obligations: List[Obligation]
+    notice_terms: List[NoticeTerm] = Field(default_factory=list)
+    obligations: List[Obligation] = Field(default_factory=list)
     ambiguities: Optional[List[Ambiguity]] = []
     clarification_questions: Optional[List[ClarificationQuestion]] = []

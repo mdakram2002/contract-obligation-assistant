@@ -13,6 +13,21 @@ The Contract Obligation Assistant helps organizations:
 
 This is an information-management tool, NOT legal advice. All extracted information should be reviewed by qualified legal professionals.
 
+## Contents
+
+- [Features](#features)
+- [Architecture](#architecture)
+- [AI workflow](#ai-workflow)
+- [Document processing](#document-processing)
+- [Human review](#human-review-workflow)
+- [Versioning](#versioning)
+- [Deadline calculation](#deadline-calculation)
+- [Local setup](#local-setup)
+- [Testing](#testing)
+- [Deployment](#deployment)
+- [Limitations](#limitations)
+- [Reviewer instructions](#reviewer-instructions)
+
 ## Features
 
 - **Document Upload**: Support for PDF, DOCX, and pasted text
@@ -121,8 +136,8 @@ contract-obligation-assistant/
 │   │   │   ├── contract_analyzer.py
 │   │   │   ├── date_calculator.py
 │   │   │   ├── analysis_service.py
-│   │   ├── clarification_detection.py
-│   │   ├── obligation_detection.py
+│   │   │   ├── clarification_detection.py
+│   │   │   ├── obligation_detection.py
 │   │   │   ├── summary_service.py
 │   │   │   ├── version_service.py
 │   │   │   └── stale_detection.py
@@ -357,10 +372,10 @@ Frontend tests are not yet implemented. This is a known limitation.
 
 This project can be deployed with **Render PostgreSQL + a Render FastAPI web service + a Vercel Vite frontend**. The frontend calls the backend directly; Render must allow the Vercel site origin through CORS.
 
-Current public service URLs:
-
-- Frontend: `https://contract-obligation-assistant.vercel.app`
-- Backend: `https://contract-obligation-assistant.onrender.com`
+| Service | URL |
+|---|---|
+| Frontend | <https://contract-obligation-assistant.vercel.app> |
+| Backend | <https://contract-obligation-assistant.onrender.com> |
 
 ### 1. Create the Render PostgreSQL database
 
@@ -379,9 +394,11 @@ Create a Render **Web Service** connected to this Git repository and branch:
 | Root Directory | `backend` |
 | Runtime | Python |
 | Build Command | `pip install -r requirements.txt` |
-| Start Command | `uvicorn app.main:app --host 0.0.0.0 --port $PORT` |
+| Start Command | `alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT` |
 | Health Check Path | `/health` |
 | Region | Same region as the Render PostgreSQL database |
+
+The Start Command applies pending migrations before launching the API. Keep the `&&` so the service does not start if a migration fails.
 
 Set these environment variables in the Render service settings:
 
@@ -399,7 +416,7 @@ Add the Vercel custom domain to `CORS_ORIGINS` too if you use one. Use an exact 
 
 For the current frontend, set `CORS_ORIGINS` to `["https://contract-obligation-assistant.vercel.app"]`.
 
-**Database migrations must run before the API is used.** If the Render service provides a Pre-Deploy Command, set it to `alembic upgrade head`. Otherwise, run `alembic upgrade head` once from the service's Shell, with the service's `DATABASE_URL` configured. Run it again after deploying future commits that add migrations. Do not run schema creation manually.
+Alembic skips revisions already applied to the database. Do not create the schema manually.
 
 After deployment, copy the service URL, such as `https://your-api.onrender.com`. Check `https://your-api.onrender.com/health` and confirm it returns JSON with `"status":"healthy"`. The `/health` endpoint only checks that the application started; verify the database separately with `/api/contracts`.
 
@@ -531,5 +548,3 @@ To evaluate this application:
 ## License
 
 This project was created as a take-home assessment.
-#   c o n t r a c t - o b l i g a t i o n - a s s i s t a n t  
- 

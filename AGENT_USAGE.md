@@ -934,9 +934,12 @@ Audit the existing implementation against the Aggroso Problem 1 assessment requi
 - Browser-checked the local Dashboard and Deadlines page. The 15 Aug and 16 Aug 2027 candidates appeared low-certainty and pending review; unknown-trigger obligations appeared without fabricated dates.
 - Local frontend, backend health, and frontend API-proxy requests returned HTTP 200; the proxy returned five contracts.
 - Confirmed `.env` files are not tracked, sensitive values in `.env.example` are blank, and no credential-pattern matches were found in tracked frontend files.
+- Verified the deployed Vercel frontend and `/upload` route returned HTTP 200, and the deployed Render `/health` endpoint returned HTTP 200.
+- Verified the deployed frontend bundle targets the Render backend; a cross-origin request from the Vercel origin to `/api/contracts` returned HTTP 200 with the expected CORS origin. PostgreSQL is configured on Render; this API read check succeeded, but a production upload/write round-trip was not tested in this audit.
 
 **Remaining Limitations:**
-- No production deployment URL was provided, so production availability and database/LLM integration were not verified.
-- No live LLM round-trip was performed.
+- No live LLM round-trip or sample-contract analysis was performed in this audit.
+- OCR is not implemented; scanned documents require text extraction support.
 - Business-day arithmetic is not implemented; business-day deadlines remain undated. The test contract also lacks a reference date/event and an applicable holiday calendar.
 - Authentication and role-based access are not implemented.
+- Frontend unit tests are not implemented.

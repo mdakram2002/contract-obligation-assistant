@@ -368,6 +368,7 @@ Output in `frontend/dist/`
 No special build step required. Ensure:
 - `DEBUG=false` in production
 - Use production PostgreSQL database
+- Render-style `postgres://` / `postgresql://` URLs are normalized to SQLAlchemy's asyncpg driver for the app and migrations
 - Set secure CORS origins
 - Use environment variables for secrets
 

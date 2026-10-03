@@ -1,5 +1,7 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
-from typing import Optional
+
+from app.database_url import normalize_async_database_url
 
 
 class Settings(BaseSettings):
@@ -10,6 +12,11 @@ class Settings(BaseSettings):
 
     # Database (PostgreSQL for production)
     DATABASE_URL: str = "postgresql+asyncpg://localhost:5432/contract_assistant"
+
+    @field_validator("DATABASE_URL")
+    @classmethod
+    def use_async_postgresql_driver(cls, value: str) -> str:
+        return normalize_async_database_url(value)
 
     # AI/LLM (Groq AI - OpenAI compatible)
     GROQ_API_KEY: str = "placeholder_key"
